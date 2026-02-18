@@ -1,0 +1,88 @@
+name: Continuous Integration - Selenium Web Tests
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  execute_test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: maven
+
+      # Setup Chrome for better stability
+      - name: Setup Chrome
+        uses: browser-actions/setup-chrome@v1
+
+      - name: Run Selenium Tests
+        env:
+          CI: true
+          GITHUB_ACTIONS: true
+          JIRA_API_CREDENTIALS: ${{ secrets.JIRA_API_CREDENTIALS }}
+        run: |
+          set +e
+          # Test-only path (commented) - use this if you don't want JIRA tickets
+          # mvn clean test
+          # TEST_RESULT=$?
+          # exit $TEST_RESULT
+          # JIRA combo (active) - tests + HTML report + JIRA tickets
+          printf "%s" "$JIRA_API_CREDENTIALS" > .env
+          mvn -Pjira-report verify
+          TEST_RESULT=$?
+          rm -f .env
+          exit $TEST_RESULT
+
+      - name: Generate Surefire HTML Report
+        if: always()
+        run: mvn -DskipTests surefire-report:report-only
+
+      - name: Upload Surefire Test Reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: surefire-reports
+          path: target/surefire-reports/
+
+      - name: Upload Test HTML Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-html-report
+          path: target/site/
+
+      - name: Upload Cucumber HTML Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cucumber-html-report
+          path: target/cucumber-reports/
+
+      - name: Upload Cucumber JSON Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cucumber-json-report
+          path: target/cucumber-reports/
+
+      - name: Upload Failure Screenshots
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-screenshots
+          path: target/screenshots/
+
+      - name: Upload ChromeDriver Log
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chromedriver-log
+          path: chromedriver.log
+
